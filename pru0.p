@@ -6,7 +6,7 @@
 #define EQCTL	  0x483001AA
 #define MIDPOINT #0x80000000
 
-#define ENA	0
+#define ENA	2
 #define DIR	14
 #define PUL	15
 

@@ -20,6 +20,7 @@
 easyBlack::memGPIO gpio;
 easyBlack::memGPIO::gpioPin gpioCD;
 
+#if 0
 static int spiFD = 0;
 
 static bool spi_open() {
@@ -65,6 +66,7 @@ static bool spi_write(const uint8_t *in, const uint8_t *out, int n) {
 	}
 	return true;
 }
+#endif
 
 #define ENCODER_STEPS_PER_REV             2880
 #define MOTOR_STEPS_PER_REV               3200
@@ -72,12 +74,18 @@ static bool spi_write(const uint8_t *in, const uint8_t *out, int n) {
 #define MOTOR_OVERSAMPLE_FACTOR           double(1L<<26)
 #define MOTOR_PITCH_MM			  (25.4*(1/double(LEAD_SCREW_ROTATIONS_PER_INCH)))
 
+const int FONT_WIDTH = 9;
+const int FONT_HEIGHT = 9;
+
+const int TEXT_WIDTH = 50;
+const int TEXT_HEIGHT = 30;
+
 // Screen dimension constants
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 480;
+const int SCREEN_WIDTH = 480;
+const int SCREEN_HEIGHT = 272;
 
 uint8_t font[256*256] = { 0 };
-uint8_t text_screen[50*30*2] = { 0xFF };
+uint8_t text_screen[TEXT_WIDTH * TEXT_HEIGHT * 2] = { 0xFF };
 uint16_t pixel_screen[2][SCREEN_WIDTH * SCREEN_HEIGHT * 2] = { 0 };
 
 uint16_t ega_palette[] = {
@@ -192,8 +200,8 @@ static int32_t MotorOffset = 0;
 static int32_t RotaryEncoderCounter = 0;
 static int32_t StepperOffsetCounter = 0;
 
-float stop		= 0.0f;
-float idle		= 0.0f;
+float stop	= 0.0f;
+float idle	= 0.0f;
 float dir   	= 1.0;
 
 double rpm   	= 0.0;
@@ -205,9 +213,9 @@ double post	= 0.0;
 #define Y_OFF 2
 
 void load_font() {
-    FILE *file = fopen("font.raw","rb");
+    FILE *file = fopen("font_480_272.raw","rb");
     if (file) {
-        fread(font, 256*256, 1, file);
+        fread(font, FONT_WIDTH * FONT_HEIGHT, 1, file);
         fclose(file);
     }
 }
@@ -215,27 +223,27 @@ void load_font() {
 void load_metric() {
     FILE *file = fopen("screen.bin","rb");
     if (file) {
-        fread(text_screen, 50*30*2, 1, file);
+        fread(text_screen, TEXT_WIDTH * TEXT_HEIGHT * 2, 1, file);
         fclose(file);
     }
 }
 
 void map_screen(uint16_t *dst) {
-    for (uint32_t y = 0; y < 30; y++) {
-        for (uint32_t x = 0; x < 50; x++) {
-            uint8_t chr = text_screen[(y*50+x)*2+0];
-            uint8_t col = text_screen[(y*50+x)*2+1];
-            uint8_t *s = (uint8_t *)&font[(chr/16)*256*16 + (chr%16)*16];
-            for (uint32_t yy = 0; yy < 16; yy++) {
-                for (uint32_t xx = 0; xx < 16; xx++) {
-                    uint16_t *d = &dst[(y*16+yy)*800+(x*16+xx)];
+    for (uint32_t y = 0; y < TEXT_HEIGHT; y++) {
+        for (uint32_t x = 0; x < TEXT_WIDTH; x++) {
+            uint8_t chr = text_screen[(y * TEXT_WIDTH + x)*2+0];
+            uint8_t col = text_screen[(y * TEXT_WIDTH + x)*2+1];
+            uint8_t *s = (uint8_t *)&font[(chr/16) * FONT_WIDTH * FONT_HEIGHT * 16 + (chr%16) * FONT_WIDTH];
+            for (uint32_t yy = 0; yy < FONT_HEIGHT; yy++) {
+                for (uint32_t xx = 0; xx < FONT_WIDTH; xx++) {
+                    uint16_t *d = &dst[(y * FONT_WIDTH + yy) * SCREEN_WIDTH + (x * FONT_WIDTH + xx)];
                     if(*s++) {
                         *d = ega_palette[col%16];//(ega_palette[col%16]<<8) | (ega_palette[col%16]>>8);
                     } else {
                         *d = ega_palette[col/16];//(ega_palette[col/16]<<8) | (ega_palette[col/16]>>8);
                     }
                 }
-                s += 256-16;
+                s += FONT_WIDTH * FONT_HEIGHT - FONT_WIDTH;
             }
         }
     }
@@ -243,8 +251,8 @@ void map_screen(uint16_t *dst) {
 
 void place_text(const char *str, uint32_t x, uint32_t y) {
     for (size_t c = 0; c < strlen(str); c++) {
-        size_t index = (y*50+x+c)*2;
-        if (index < 50*30*2) {
+        size_t index = (y*TEXT_WIDTH+x+c)*2;
+        if (index < TEXT_WIDTH*TEXT_HEIGHT*2) {
             text_screen[index] = str[c];
         }
     }
@@ -254,7 +262,7 @@ void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t col) {
     for (uint32_t yy = y; yy < y + h; yy++ ) {
         for (uint32_t xx = x; xx < x + w; xx++ ) {
             size_t index = (yy*50+xx)*2+1;
-            if (index < 50*30*2) {
+            if (index < TEXT_WIDTH*TEXT_HEIGHT*2) {
                 text_screen[index] = col;
             }
         }
@@ -558,6 +566,13 @@ static const uint8_t CTRL_HI_Y = 0b1101  << 4;
 
 static const uint16_t ADC_MAX = 0x0fff;  // 12 bits
 
+#if 1
+static void TouchInit() {
+}
+
+static void TouchCalc(int32_t &x, int32_t &y, int32_t &t) {
+}
+#else
 static void TouchInit() {
 	uint8_t init[] = {CTRL_HI_Y | CTRL_LO_SER, 0, 0 };
 	spi_write(init, init, sizeof(init));
@@ -587,6 +602,7 @@ static void TouchCalc(int32_t &x, int32_t &y, int32_t &t) {
 
 //	printf("%04d %04d %02d\n", x, y, i, pinInt);
 }
+#endif
   
 static void intHandler(int) {
 	if (params) {
@@ -609,12 +625,15 @@ int main(int argc, char **argv) {
 
     init_fb();
 
+#if 1
+#else
     if (!spi_open()) {
         printf("spi_open() failed\n");  
         return 1;  
     }
+#endif
     
-	TouchInit();
+    TouchInit();
 
     gpioCD = gpio.getPin("P9_15"); 
 
