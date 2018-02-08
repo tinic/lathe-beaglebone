@@ -215,7 +215,7 @@ double post	= 0.0;
 void load_font() {
     FILE *file = fopen("font_480_272.raw","rb");
     if (file) {
-        fread(font, FONT_WIDTH * FONT_HEIGHT, 1, file);
+        fread(font, FONT_WIDTH * FONT_HEIGHT * 256, 1, file);
         fclose(file);
     }
 }
@@ -243,7 +243,7 @@ void map_screen(uint16_t *dst) {
                         *d = ega_palette[col/16];//(ega_palette[col/16]<<8) | (ega_palette[col/16]>>8);
                     }
                 }
-                s += FONT_WIDTH * FONT_HEIGHT - FONT_WIDTH;
+                s += FONT_WIDTH * 16 - FONT_WIDTH;
             }
         }
     }
@@ -567,10 +567,75 @@ static const uint8_t CTRL_HI_Y = 0b1101  << 4;
 static const uint16_t ADC_MAX = 0x0fff;  // 12 bits
 
 #if 1
+
+#include <linux/input.h>
+
+#define EVENT_DEVICE    "/dev/input/event0"
+#define EVENT_TYPE      EV_ABS
+#define EVENT_CODE_X    ABS_X
+#define EVENT_CODE_Y    ABS_Y
+
+static int fd_event = 0;
+
 static void TouchInit() {
+    fd_event = open(EVENT_DEVICE, O_RDONLY);
+    char name[256] = "Unknown";
+        
+    if (fd_event == -1) {
+        fprintf(stderr, "%s is not a vaild device\n", EVENT_DEVICE);
+        exit(-1);        
+    }
+    
+    ioctl(fd_event, EVIOCGNAME(sizeof(name)), name);
+    printf("Reading from:\n");
+    printf("device file = %s\n", EVENT_DEVICE);
+    printf("device name = %s\n", name);
+                            
 }
 
 static void TouchCalc(int32_t &x, int32_t &y, int32_t &t) {
+    static struct input_event ev[64] = {0};
+    
+    static int xx = 0;
+    static int yy = 0;
+    
+    fd_set readfds;
+    struct timeval tv = {0};
+    
+    FD_ZERO(&readfds);
+    FD_SET(fd_event, &readfds);
+    int ret = select(fd_event + 1, &readfds, 0, 0, &tv);
+    if (ret <= 0) {
+        x = xx;
+        y = yy;
+        return;
+    } 
+    
+    int rb = read(fd_event,ev,sizeof(struct input_event)*64);
+    for (int32_t c = 0; c < (rb/sizeof(struct input_event)); c++) {
+        if (ev[c].type == EVENT_TYPE) {
+            switch(ev[c].code) {
+                case	EVENT_CODE_X:
+                        if (t) xx = ev[c].value;
+                        break;
+                case	EVENT_CODE_Y:
+                        if (t) yy = ev[c].value;
+                        break;
+                case 	0x39:
+                        if (ev[c].value < 0) {
+                            t = 0;
+                        } else {
+                            t = 1;
+                        }
+                        break;
+            }
+        }
+    }
+
+    x = xx;
+    y = yy;
+    
+//    printf("%d %d %d\n", x, y, t);
 }
 #else
 static void TouchInit() {
@@ -691,7 +756,7 @@ int main(int argc, char **argv) {
 
 		if (!inTouch && t) {
 			inTouch = true;
-			tap_screen(x / 16, y / 16);	
+			tap_screen(x / FONT_WIDTH, y / FONT_HEIGHT);	
 		}
 
 		if (!t) {

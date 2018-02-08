@@ -1,5 +1,7 @@
 #!/bin/sh
 
+cd /home/debian/lathe-beaglebone/
+
 config-pin P9_30 pruout
 config-pin P8_11 pruout
 config-pin P8_12 pruout
@@ -13,4 +15,4 @@ config-pin P9_92 qep
 
 echo 0 > /sys/devices/virtual/graphics/fbcon/cursor_blink
 
-/home/debian/lathe/lathe
+./lathe
